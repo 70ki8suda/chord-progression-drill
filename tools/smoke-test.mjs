@@ -12,6 +12,8 @@ const checks = [
   ['fallback piano renderer', /fallbackStaffNotesSVG/, html],
   ['fallback guitar renderer', /fallbackGuitarSVG/, html],
   ['VexFlow text font is not globally overridden', !/(^|\n)\s*svg text\s*\{\s*font-family\s*:\s*system-ui\s*;?\s*\}/.test(html)],
+  ['VexFlow SVG overflow remains visible', /\.vexstaff svg,\.vextab svg\{[^}]*overflow:visible/, html],
+  ['VexFlow tab has clipping-safe height', /const W=178,H=132,div=document\.createElement\("div"\)/, html],
   ['build script', Boolean(pkg.scripts?.build)],
   ['deploy script targets dist', /pages deploy dist/.test(pkg.scripts?.deploy || '')],
   ['deploy script targets production branch', /--branch production/.test(pkg.scripts?.deploy || '')],
