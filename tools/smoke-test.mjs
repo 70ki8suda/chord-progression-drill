@@ -13,6 +13,7 @@ const checks = [
   ['fallback guitar renderer', /fallbackGuitarSVG/, html],
   ['build script', Boolean(pkg.scripts?.build)],
   ['deploy script targets dist', /pages deploy dist/.test(pkg.scripts?.deploy || '')],
+  ['deploy script targets production branch', /--branch production/.test(pkg.scripts?.deploy || '')],
   ['Wrangler project name', /chord-progression-drill/, wrangler],
   ['Wrangler dist output directory', /"pages_build_output_dir"\s*:\s*"dist"/, wrangler],
 ];

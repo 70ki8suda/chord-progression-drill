@@ -1,7 +1,7 @@
 {
   "scripts": {
     "build": "node tools/build-pages.mjs",
-    "deploy": "npm run build && npx wrangler pages deploy dist --project-name chord-progression-drill",
+    "deploy": "npm run build && npx wrangler pages deploy dist --project-name chord-progression-drill --branch production",
     "test": "node tools/smoke-test.mjs"
   }
 }
