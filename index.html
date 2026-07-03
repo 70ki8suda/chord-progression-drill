@@ -46,9 +46,12 @@ main{max-width:760px;margin:0 auto;padding:16px;}
 .nb{display:none;margin-top:12px;border-top:1px dashed var(--bd);padding-top:12px;}
 .nb.open{display:block;}
 .nbgrid{display:flex;gap:10px;flex-wrap:wrap;}
-.nbitem{background:var(--card2);border-radius:10px;padding:8px;text-align:center;}
+.nbitem{background:var(--card2);border-radius:10px;padding:8px;text-align:center;min-width:180px;}
 .nbitem .nm{font-size:12.5px;font-weight:700;margin-bottom:2px;}
 .nbitem .nn{font-size:9.5px;color:var(--tx2);margin-top:2px;line-height:1.4;}
+.vexstaff,.vextab{display:flex;justify-content:center;overflow:visible;}
+.vexstaff svg,.vextab svg{display:block;max-width:100%;height:auto;}
+.tabwrap{display:flex;gap:8px;justify-content:center;align-items:flex-start;flex-wrap:wrap;}
 svg text{font-family:system-ui;}
 select{background:var(--card);color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:6px 10px;font-size:13px;max-width:100%;}
 .qbox{text-align:center;padding:8px 0;}
@@ -73,6 +76,7 @@ select{background:var(--card);color:var(--tx);border:1px solid var(--bd);border-
 </nav>
 </header>
 <main id="main"></main>
+<script src="https://unpkg.com/vexflow@5.0.0/build/cjs/vexflow.js"></script>
 <script>
 "use strict";
 /* ============ 基礎データ ============ */
@@ -159,7 +163,7 @@ function spell(key,m){
 }
 
 /* ============ 五線譜SVG ============ */
-function staffNotesSVG(key,lh,rh){
+function fallbackStaffNotesSVG(key,lh,rh){
  const W=150;
  let s=`<svg width="${W}" height="185" viewBox="0 0 ${W} 185" xmlns="http://www.w3.org/2000/svg">`;
  for(let i=0;i<5;i++){s+=`<line x1="8" y1="${40+i*10}" x2="${W-8}" y2="${40+i*10}" stroke="#888" stroke-width="1"/>`;
@@ -191,6 +195,57 @@ function staffNotesSVG(key,lh,rh){
  drawNotes(lh,yB,88);
  s+="</svg>";
  return s;
+}
+function vexFlow(){
+ return window.VexFlow||null;
+}
+function vexKey(o){
+ const oct=Math.floor(o.m/12)-1;
+ const acc=o.acc===1?"#":o.acc===-1?"b":"";
+ return o.nm[0].toLowerCase()+acc+"/"+oct;
+}
+function vexAccidental(o){
+ return o.acc===1?"#":o.acc===-1?"b":null;
+}
+function addVexAccidentals(note,spelled){
+ const VF=vexFlow();
+ if(!VF)return;
+ spelled.forEach((o,i)=>{
+  const acc=vexAccidental(o);
+  if(acc)note.addModifier(new VF.Accidental(acc),i);
+ });
+}
+function renderVexPianoStaff(key,lh,rh){
+ const VF=vexFlow();
+ if(!VF||!document)return fallbackStaffNotesSVG(key,lh,rh);
+ try{
+  const W=178,H=188,div=document.createElement("div");
+  div.className="vexstaff";
+  const renderer=new VF.Renderer(div,VF.Renderer.Backends.SVG);
+  renderer.resize(W,H);
+  const ctx=renderer.getContext();
+  ctx.setFont("Arial",10);
+  const treble=new VF.Stave(8,8,W-16).addClef("treble");
+  const bass=new VF.Stave(8,88,W-16).addClef("bass");
+  treble.setContext(ctx).draw();
+  bass.setContext(ctx).draw();
+  if(VF.StaveConnector){
+   new VF.StaveConnector(treble,bass).setType(VF.StaveConnector.type.BRACE).setContext(ctx).draw();
+   new VF.StaveConnector(treble,bass).setType(VF.StaveConnector.type.SINGLE_LEFT).setContext(ctx).draw();
+  }
+  const rhSp=rh.map(m=>spell(key,m));
+  const lhSp=lh.map(m=>spell(key,m));
+  const rhNote=new VF.StaveNote({clef:"treble",keys:rhSp.map(vexKey),duration:"q"});
+  const lhNote=new VF.StaveNote({clef:"bass",keys:lhSp.map(vexKey),duration:"q"});
+  addVexAccidentals(rhNote,rhSp);
+  addVexAccidentals(lhNote,lhSp);
+  VF.Formatter.FormatAndDraw(ctx,treble,[rhNote],{auto_beam:false});
+  VF.Formatter.FormatAndDraw(ctx,bass,[lhNote],{auto_beam:false});
+  return div.outerHTML;
+ }catch(err){
+  console.warn("VexFlow piano render failed",err);
+  return fallbackStaffNotesSVG(key,lh,rh);
+ }
 }
 
 /* ============ ギター ============ */
@@ -230,7 +285,7 @@ function guitarFor(pc,t,prevF){
  }
  return best;
 }
-function guitarSVG(name,sh,f){
+function fallbackGuitarSVG(name,sh,f){
  const rel=sh.rel;
  const frets=rel.filter(r=>r!=="x").map(r=>f+r);
  const played=frets.filter(x=>x>0);
@@ -258,6 +313,36 @@ function guitarSVG(name,sh,f){
  s+="</svg>";
  return s;
 }
+function tabPositions(sh,f){
+ const pos=[];
+ sh.rel.forEach((r,i)=>{
+  if(r==="x")return;
+  pos.push({str:String(6-i),fret:String(f+r)});
+ });
+ return pos;
+}
+function renderVexGuitarTab(name,sh,f){
+ const VF=vexFlow();
+ if(!VF||!document)return "";
+ try{
+  const W=178,H=92,div=document.createElement("div");
+  div.className="vextab";
+  const renderer=new VF.Renderer(div,VF.Renderer.Backends.SVG);
+  renderer.resize(W,H);
+  const ctx=renderer.getContext();
+  ctx.setFont("Arial",10);
+  const stave=new VF.TabStave(8,8,W-16).addTabGlyph();
+  stave.setContext(ctx).draw();
+  const positions=tabPositions(sh,f);
+  if(!positions.length)return "";
+  const note=new VF.TabNote({positions,duration:"q"});
+  VF.Formatter.FormatAndDraw(ctx,stave,[note],{auto_beam:false});
+  return div.outerHTML;
+ }catch(err){
+  console.warn("VexFlow tab render failed",err);
+  return "";
+ }
+}
 
 /* ============ 譜面パネル ============ */
 function notationHTML(key,chs,voiced){
@@ -269,9 +354,11 @@ function notationHTML(key,chs,voiced){
   const g=guitarFor(pc,ch.t,prevF);prevF=g.f;
   const lhN=v.lh.map(m=>spell(key,m).nm).join(" ");
   const rhN=v.rh.map(m=>spell(key,m).nm).join(" ");
+  const name=cname(key,ch);
+  const tab=renderVexGuitarTab(name,g.sh,g.f);
   h+=`<div class="nbitem"><div class="nm">${cname(key,ch)}</div>`
-   +staffNotesSVG(key,v.lh,v.rh)
-   +guitarSVG(cname(key,ch),g.sh,g.f)
+   +renderVexPianoStaff(key,v.lh,v.rh)
+   +`<div class="tabwrap">${tab}${fallbackGuitarSVG(name,g.sh,g.f)}</div>`
    +`<div class="nn">左: ${lhN}<br>右: ${rhN}</div></div>`;
  });
  h+="</div>";
