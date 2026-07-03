@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<script type="application/json" id="cowork-artifact-meta">
+{
+  "name": "Chord Progression Drill",
+  "schemaVersion": 1,
+  "description": "ピアノ向け毎日コード進行練習ドリル。曜日別メニュー(定番進行/セカンダリードミナント/裏コード/テンション)、ランダムキークイズ、全キー対応リファレンス。音再生付き。"
+}
+</script>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>毎日コード進行ドリル 🎹</title>
+<style>
+  :root{
+    color-scheme: light;
+    --bg:#f6f7fb; --panel:#ffffff; --panel2:#eef0f7; --line:#d8dcea;
+    --txt:#23263a; --sub:#6b7188; --acc:#5b6cff; --acc2:#0e9488; --warn:#c05621;
+    --chip:#f0f2fa; --good:#2f855a;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{background:var(--bg); color:var(--txt);
+    font-family:"Hiragino Sans","Yu Gothic UI","Noto Sans JP",sans-serif;
+    line-height:1.6; padding:16px; max-width:820px; margin:0 auto;}
+  header{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:6px;}
+  h1{font-size:20px;}
+  header .date{color:var(--sub); font-size:13px;}
+  nav{display:flex; gap:8px; margin:14px 0;}
+  nav button{flex:1; padding:10px 4px; border:1px solid var(--line); background:var(--panel);
+    color:var(--sub); border-radius:10px; font-size:14px; cursor:pointer; font-weight:600;}
+  nav button.on{background:var(--acc); color:#fff; border-color:var(--acc);}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:14px 16px; margin-bottom:12px; box-shadow:0 1px 3px rgba(30,35,60,.05);}
+  .card h3{font-size:15px; margin-bottom:4px;}
+  .card .time{color:var(--acc2); font-size:12px; font-weight:700; margin-right:6px;}
+  .card p.desc{color:var(--sub); font-size:13px; margin-bottom:8px;}
+  .chips{display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:6px 0;}
+  .chip{background:var(--chip); border:1px solid var(--line); border-radius:8px;
+    padding:6px 10px; cursor:pointer; text-align:center; user-select:none;}
+  .chip:hover{border-color:var(--acc);}
+  .chip .cn{font-size:15px; font-weight:700;}
+  .chip .rn{font-size:10.5px; color:var(--sub); display:block;}
+  .arrow{color:var(--sub); font-size:12px;}
+  .btn{background:var(--panel2); border:1px solid var(--line); color:var(--txt);
+    border-radius:8px; padding:7px 14px; font-size:13px; cursor:pointer;}
+  .btn:hover{border-color:var(--acc);}
+  .btn.primary{background:var(--acc); border-color:var(--acc); color:#fff; font-weight:700;}
+  .btn.play{color:var(--acc2);}
+  .notesOut{font-size:12.5px; color:var(--warn); min-height:18px; margin-top:6px;}
+  .keytag{display:inline-block; background:#e9e2fb; color:#5b3fd4; border-radius:6px;
+    padding:1px 8px; font-size:12.5px; font-weight:700; margin-right:6px;}
+  .theme{background:linear-gradient(90deg,#e6e9ff,#dff5f3); border:1px solid var(--line);
+    border-radius:12px; padding:12px 16px; margin-bottom:12px;}
+  .theme b{color:var(--acc2);}
+  .qbox{font-size:17px; font-weight:700; margin:10px 0 14px;}
+  .row{display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:8px 0;}
+  select,label{font-size:13px;}
+  select{background:var(--panel2); color:var(--txt); border:1px solid var(--line);
+    border-radius:8px; padding:6px 8px;}
+  .streak{color:var(--sub); font-size:13px;}
+  .hint{color:var(--sub); font-size:12px;}
+  .small{font-size:12px; color:var(--sub);}
+  .sec{margin-top:18px;}
+  .sec h2{font-size:16px; border-left:4px solid var(--acc); padding-left:8px; margin-bottom:8px;}
+  footer{color:var(--sub); font-size:11.5px; margin:18px 0 8px; text-align:center;}
+</style>
+</head>
+<body>
+<header>
+  <h1>🎹 毎日コード進行ドリル</h1>
+  <span class="date" id="dateLabel"></span>
+</header>
+<nav>
+  <button id="tabDaily" class="on">今日のメニュー</button>
+  <button id="tabQuiz">クイズ</button>
+  <button id="tabRef">リファレンス</button>
+</nav>
+<main id="main"></main>
+<footer>コードチップをクリックすると音が鳴ります(左手ルート+右手ボイシング)</footer>
+
+<script>
+/* ================= 音楽データ ================= */
+const SHARP=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const FLAT =["C","Db","D","Eb","E","F","Gb","G","Ab","A","Bb","B"];
+const KEYS=[
+ {n:"C",s:0,f:false},{n:"Db",s:1,f:true},{n:"D",s:2,f:false},{n:"Eb",s:3,f:true},
+ {n:"E",s:4,f:false},{n:"F",s:5,f:true},{n:"F#",s:6,f:false},{n:"G",s:7,f:false},
+ {n:"Ab",s:8,f:true},{n:"A",s:9,f:false},{n:"Bb",s:10,f:true},{n:"B",s:11,f:false}
+];
+const TYPES={
+ "":       {sfx:"",           iv:[0,4,7]},
+ "m":      {sfx:"m",          iv:[0,3,7]},
+ "M7":     {sfx:"△7",         iv:[0,4,7,11]},
+ "m7":     {sfx:"m7",         iv:[0,3,7,10]},
+ "7":      {sfx:"7",          iv:[0,4,7,10]},
+ "m7b5":   {sfx:"m7(♭5)",     iv:[0,3,6,10]},
+ "M7_9":   {sfx:"△7(9)",      iv:[0,4,7,11,14]},
+ "m7_9":   {sfx:"m7(9)",      iv:[0,3,7,10,14]},
+ "7_913":  {sfx:"7(9,13)",    iv:[0,4,10,14,21]},
+ "7_b9b13":{sfx:"7(♭9,♭13)",  iv:[0,4,10,13,20]},
+ "7_s11":  {sfx:"7(#11)",     iv:[0,4,10,18]}
+};
+function noteName(key,semi){ const arr=key.f?FLAT:SHARP; return arr[((semi%12)+12)%12]; }
+function chordName(key,ch){ return noteName(key,key.s+ch.d)+TYPES[ch.t].sfx; }
+function chordNotes(key,ch){
+  return TYPES[ch.t].iv.map(i=>noteName(key,key.s+ch.d+i)).join(" ");
+}
+/* 進行定義: d=キーからの半音距離, t=タイプ, r=度数表記 */
+const PROGS=[
+ {id:"jtto", name:"Just the Two of Us進行", desc:"丸サ進行。IV△7から下がっていく王様ループ",
+  ch:[{d:5,t:"M7",r:"IV△7"},{d:4,t:"7",r:"III7"},{d:9,t:"m7",r:"VIm7"},{d:7,t:"m7",r:"Vm7"},{d:0,t:"7",r:"I7"}]},
+ {id:"oudou", name:"王道進行", desc:"J-POPサビの定番 4-5-3-6",
+  ch:[{d:5,t:"M7",r:"IV△7"},{d:7,t:"7",r:"V7"},{d:4,t:"m7",r:"IIIm7"},{d:9,t:"m7",r:"VIm7"}]},
+ {id:"komuro", name:"小室進行", desc:"6-4-5-1。マイナー始まりの疾走感",
+  ch:[{d:9,t:"m",r:"VIm"},{d:5,t:"",r:"IV"},{d:7,t:"",r:"V"},{d:0,t:"",r:"I"}]},
+ {id:"canon", name:"カノン進行", desc:"1-5-6-3-4-1-4-5",
+  ch:[{d:0,t:"",r:"I"},{d:7,t:"",r:"V"},{d:9,t:"m",r:"VIm"},{d:4,t:"m",r:"IIIm"},
+      {d:5,t:"",r:"IV"},{d:0,t:"",r:"I"},{d:5,t:"",r:"IV"},{d:7,t:"",r:"V"}]},
+ {id:"251", name:"2-5-1", desc:"全ての基本。ツーファイブワン",
+  ch:[{d:2,t:"m7",r:"IIm7"},{d:7,t:"7",r:"V7"},{d:0,t:"M7",r:"I△7"}]},
+ {id:"1625", name:"1-6-2-5", desc:"循環進行。スタンダードの定番",
+  ch:[{d:0,t:"M7",r:"I△7"},{d:9,t:"m7",r:"VIm7"},{d:2,t:"m7",r:"IIm7"},{d:7,t:"7",r:"V7"}]}
+];
+const SECONDARY=[
+ {name:"V7/II",  from:{d:9,t:"7",r:"VI7"},   to:{d:2,t:"m7",r:"IIm7"}},
+ {name:"V7/III", from:{d:11,t:"7",r:"VII7"}, to:{d:4,t:"m7",r:"IIIm7"}},
+ {name:"V7/IV",  from:{d:0,t:"7",r:"I7"},    to:{d:5,t:"M7",r:"IV△7"}},
+ {name:"V7/V",   from:{d:2,t:"7",r:"II7"},   to:{d:7,t:"7",r:"V7"}},
+ {name:"V7/VI",  from:{d:4,t:"7",r:"III7"},  to:{d:9,t:"m7",r:"VIm7"}}
+];
+const URA=[
+ {name:"V7 → 裏",    ura:{d:1,t:"7",r:"♭II7"},  to:{d:0,t:"M7",r:"I△7"},  orig:"V7"},
+ {name:"V7/II → 裏", ura:{d:3,t:"7",r:"♭III7"}, to:{d:2,t:"m7",r:"IIm7"}, orig:"VI7"},
+ {name:"V7/III → 裏",ura:{d:5,t:"7",r:"IV7"}, to:{d:4,t:"m7",r:"IIIm7"}, orig:"VII7"},
+ {name:"V7/V → 裏",  ura:{d:8,t:"7",r:"♭VI7"},  to:{d:7,t:"7",r:"V7"},    orig:"II7"},
+ {name:"V7/VI → 裏", ura:{d:10,t:"7",r:"♭VII7"},to:{d:9,t:"m7",r:"VIm7"}, orig:"III7"}
+];
+const TENSION_251=[
+ {name:"メジャー2-5-1(明るいテンション)",
+  ch:[{d:2,t:"m7_9",r:"IIm7(9)"},{d:7,t:"7_913",r:"V7(9,13)"},{d:0,t:"M7_9",r:"I△7(9)"}]},
+ {name:"オルタード寄り2-5-1(切ないテンション)",
+  ch:[{d:2,t:"m7_9",r:"IIm7(9)"},{d:7,t:"7_b9b13",r:"V7(♭9,♭13)"},{d:0,t:"M7_9",r:"I△7(9)"}]},
+ {name:"裏コード2-5-1(#11で浮遊感)",
+  ch:[{d:2,t:"m7_9",r:"IIm7(9)"},{d:1,t:"7_s11",r:"♭II7(#11)"},{d:0,t:"M7_9",r:"I△7(9)"}]}
+];
+const JTTO_URA={name:"Just the Two of Us(裏コード版)", desc:"III7を裏コード♭VII7に置き換え。ベースが半音下降に",
+ ch:[{d:5,t:"M7",r:"IV△7"},{d:10,t:"7",r:"♭VII7"},{d:9,t:"m7",r:"VIm7"},{d:7,t:"m7",r:"Vm7"},{d:0,t:"7",r:"I7"}]};
+const P1625_SEC={name:"1-6-2-5(VIm7→VI7化)", desc:"VIをセカンダリードミナントVI7(V7/II)に",
+ ch:[{d:0,t:"M7",r:"I△7"},{d:9,t:"7",r:"VI7"},{d:2,t:"m7",r:"IIm7"},{d:7,t:"7",r:"V7"}]};
+const P1625_URA={name:"1-6-2-♭2(裏コード仕上げ)", desc:"V7を裏コード♭II7(#11)に。ベースが 2→♭2→1 と半音下降",
+ ch:[{d:0,t:"M7",r:"I△7"},{d:9,t:"7",r:"VI7"},{d:2,t:"m7",r:"IIm7"},{d:1,t:"7_s11",r:"♭II7(#11)"}]};
+
+/* ================= オーディオ ================= */
+let AC=null;
+function ac(){ if(!AC) AC=new (window.AudioContext||window.webkitAudioContext)(); return AC; }
+function midiFreq(m){ return 440*Math.pow(2,(m-69)/12); }
+function voicing(key,ch){
+  const root=(key.s+ch.d)%12;
+  let bass=36+root; if(bass>45)bass-=12;
+  let base=60+root; if(base>66)base-=12;
+  return [bass, ...TYPES[ch.t].iv.map(i=>base+i)];
+}
+function playNotes(midis,when,dur){
+  const c=ac(), t=c.currentTime+when;
+  midis.forEach(m=>{
+    const o=c.createOscillator(), g=c.createGain();
+    o.type="triangle"; o.frequency.value=midiFreq(m);
+    g.gain.setValueAtTime(0,t);
+    g.gain.linearRampToValueAtTime(0.14,t+0.02);
+    g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+    o.connect(g); g.connect(c.destination);
+    o.start(t); o.stop(t+dur+0.05);
+  });
+}
+function playChord(key,ch){ playNotes(voicing(key,ch),0,1.4); }
+function playProg(key,chs){ chs.forEach((ch,i)=>playNotes(voicing(key,ch),i*1.5,1.45)); }
+
+/* ================= ユーティリティ ================= */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+const today=new Date();
+const seed=today.getFullYear()*10000+(today.getMonth()+1)*100+today.getDate();
+const rngDaily=mulberry32(seed);
+function pickKeys(rng,n){
+  const idx=[...Array(12).keys()];
+  for(let i=idx.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]];}
+  return idx.slice(0,n).map(i=>KEYS[i]);
+}
+
+/* チップ描画: registryに(key,chord)を登録してクリック再生 */
+let REG=[];
+function chipHTML(key,ch,showRoman){
+  const id=REG.length; REG.push({key,ch});
+  const rn=showRoman&&ch.r?`<span class="rn">${ch.r}</span>`:"";
+  return `<div class="chip" data-cid="${id}" title="クリックで再生"><span class="cn">${chordName(key,ch)}</span>${rn}</div>`;
+}
+function progHTML(key,chs,showRoman){
+  return `<div class="chips">`+chs.map(c=>chipHTML(key,c,showRoman)).join(`<span class="arrow">→</span>`)+`</div>`;
+}
+function progCard(title,desc,key,chs,opt){
+  opt=opt||{};
+  const id=REG.length;
+  REG.push({key,ch:null,prog:chs});
+  return `<div class="card">
+    <h3>${opt.time?`<span class="time">${opt.time}</span>`:""}${title} <span class="keytag">Key: ${key.n}</span></h3>
+    ${desc?`<p class="desc">${desc}</p>`:""}
+    ${progHTML(key,chs,opt.roman!==false)}
+    <div class="row"><button class="btn play" data-pid="${id}">▶ 通しで再生</button></div>
+    <div class="notesOut" data-out="${id}"></div>
+  </div>`;
+}
+
+/* ================= 今日のメニュー ================= */
+const WD_THEMES={
+ 1:{t:"定番進行の日",d:"王道進行とJust the Two of Us進行をランダムキーで回す"},
+ 2:{t:"セカンダリードミナントの日",d:"5種のV7/xを1つのキーで総ざらい"},
+ 3:{t:"裏コードの日",d:"♭II7への置き換えを体に入れる"},
+ 4:{t:"テンションの日",d:"2-5-1に9th・13th・オルタードを乗せる"},
+ 5:{t:"総合の日",d:"1-6-2-5をセカンダリー&裏コードで発展させる"},
+ 6:{t:"ランダムキー通しの日",d:"丸サ進行を3キーで移調練習"},
+ 0:{t:"復習の日",d:"カノン進行+今週あやしかった項目をクイズで復習"}
+};
+function renderDaily(){
+  REG=[];
+  const wd=today.getDay();
+  const th=WD_THEMES[wd];
+  let h=`<div class="theme">📅 今日は <b>${th.t}</b> — ${th.d}<br>
+    <span class="small">目安: ウォームアップ3分 → メインドリル7分 → 仕上げ3分(計約13分)</span></div>`;
+
+  const wKeys=pickKeys(rngDaily,2);
+  const p251=PROGS.find(p=>p.id==="251");
+  h+=`<div class="sec"><h2>① ウォームアップ(3分)</h2></div>`;
+  wKeys.forEach(k=>{ h+=progCard("2-5-1","両手で2周。2周目は目を閉じて",k,p251.ch,{time:"90秒"}); });
+
+  h+=`<div class="sec"><h2>② メインドリル(7分)</h2></div>`;
+  if(wd===1){
+    const ks=pickKeys(rngDaily,2);
+    h+=progCard(PROGS[1].name,PROGS[1].desc,ks[0],PROGS[1].ch,{time:"3分"});
+    h+=progCard(PROGS[0].name,PROGS[0].desc,ks[1],PROGS[0].ch,{time:"4分"});
+  }else if(wd===2){
+    const k=pickKeys(rngDaily,1)[0];
+    SECONDARY.forEach(s=>{
+      h+=progCard(`${s.name}(${s.from.r} → ${s.to.r})`,"ドミナント→解決を2回ずつ。7thの解決(半音下行)を意識",k,[s.from,s.to],{time:"80秒"});
+    });
+  }else if(wd===3){
+    const ks=pickKeys(rngDaily,3);
+    ks.forEach((k,i)=>{
+      h+=progCard("裏コード2-5-1(IIm7 → ♭II7 → I△7)","V7の代わりに♭II7。ベースの半音下降 2→♭2→1 を味わう",k,
+        [{d:2,t:"m7",r:"IIm7"},{d:1,t:"7",r:"♭II7"},{d:0,t:"M7",r:"I△7"}],{time:"90秒"});
+    });
+    h+=progCard(JTTO_URA.name,JTTO_URA.desc,ks[0],JTTO_URA.ch,{time:"2分"});
+  }else if(wd===4){
+    const ks=pickKeys(rngDaily,2);
+    TENSION_251.forEach((t251,i)=>{
+      h+=progCard(t251.name,"テンション音がどれか声に出しながら弾く",ks[i%2],t251.ch,{time:"2分"});
+    });
+  }else if(wd===5){
+    const k=pickKeys(rngDaily,1)[0];
+    h+=progCard("1-6-2-5(基本形)","まず普通に",k,PROGS.find(p=>p.id==="1625").ch,{time:"2分"});
+    h+=progCard(P1625_SEC.name,P1625_SEC.desc,k,P1625_SEC.ch,{time:"2分"});
+    h+=progCard(P1625_URA.name,"最後のV7を裏コード♭II7(#11)に置き換え",k,P1625_URA.ch,{time:"3分"});
+  }else if(wd===6){
+    pickKeys(rngDaily,3).forEach(k=>{
+      h+=progCard(PROGS[0].name,"テンポを落とさず移調。迷ったら度数で考える",k,PROGS[0].ch,{time:"2分強"});
+    });
+  }else{
+    const k=pickKeys(rngDaily,1)[0];
+    h+=progCard(PROGS[3].name,PROGS[3].desc,k,PROGS[3].ch,{time:"3分"});
+    h+=`<div class="card"><h3><span class="time">4分</span>クイズで復習</h3>
+      <p class="desc">「クイズ」タブでミックス出題を5問。あやしかったカテゴリを来週の重点に</p></div>`;
+  }
+
+  h+=`<div class="sec"><h2>③ 仕上げ(3分)</h2></div>`;
+  const fp=PROGS[Math.floor(rngDaily()*PROGS.length)];
+  const fk=pickKeys(rngDaily,1)[0];
+  h+=progCard(fp.name+"(自由に装飾)",
+    "覚えた進行に今日のテーマの技(テンション・裏コード等)を1つ混ぜて自由に弾く",fk,fp.ch,{time:"3分"});
+  document.getElementById("main").innerHTML=h;
+}
+
+/* ================= クイズ ================= */
+let quiz={cat:"mix", q:null, streak:0, total:0, correct:0, showRoman:true};
+function makeQuestion(){
+  const rng=Math.random;
+  let cat=quiz.cat;
+  if(cat==="mix") cat=["teiban","sec","ura","tension"][Math.floor(rng()*4)];
+  const key=KEYS[Math.floor(rng()*12)];
+  if(cat==="teiban"){
+    const p=PROGS[Math.floor(rng()*PROGS.length)];
+    const hint=quiz.showRoman?`(${p.ch.map(c=>c.r).join("→")})`:"";
+    return {key, text:`「${p.name}」${hint} をコードネームで`, chs:p.ch, tips:p.desc};
+  }
+  if(cat==="sec"){
+    const s=SECONDARY[Math.floor(rng()*SECONDARY.length)];
+    return {key, text:`${s.name}(${s.to.r} に向かうセカンダリードミナント)と解決先は?`, chs:[s.from,s.to],
+      tips:"解決先の完全5度上のドミナント7th"};
+  }
+  if(cat==="ura"){
+    const u=URA[Math.floor(rng()*URA.length)];
+    return {key, text:`${u.name.split(" ")[0]}(度数: ${u.orig})の裏コードと解決先は?`, chs:[u.ura,u.to],
+      tips:"元のドミナントの増4度(半音6つ)上。解決先の半音上から下りる"};
+  }
+  const t=TENSION_251[Math.floor(rng()*TENSION_251.length)];
+  return {key, text:`「${t.name}」をコードネームで`, chs:t.ch, tips:"テンションは9th=ルートの全音上、13th=5度の全音上"};
+}
+function renderQuiz(){
+  REG=[];
+  const q=quiz.q;
+  let h=`<div class="card">
+    <div class="row">
+      <label>カテゴリ:
+        <select id="qcat">
+          <option value="mix"${quiz.cat==="mix"?" selected":""}>ミックス(おすすめ)</option>
+          <option value="teiban"${quiz.cat==="teiban"?" selected":""}>定番進行</option>
+          <option value="sec"${quiz.cat==="sec"?" selected":""}>セカンダリードミナント</option>
+          <option value="ura"${quiz.cat==="ura"?" selected":""}>裏コード</option>
+          <option value="tension"${quiz.cat==="tension"?" selected":""}>テンション</option>
+        </select></label>
+      <label><input type="checkbox" id="qroman"${quiz.showRoman?" checked":""}> 度数ヒント</label>
+      <span class="streak">連続正解: ${quiz.streak} / 正答率: ${quiz.total?Math.round(100*quiz.correct/quiz.total):"–"}${quiz.total?"%":""} (${quiz.total}問)</span>
+    </div>
+  </div>`;
+  if(q){
+    h+=`<div class="card">
+      <span class="keytag">Key: ${q.key.n}</span>
+      <div class="qbox">${q.text}</div>
+      <p class="hint">頭の中(または鍵盤の上)で答えてから ↓</p>
+      <div class="row">
+        ${q.revealed?"":`<button class="btn primary" id="qreveal">答えを見る</button>`}
+      </div>`;
+    if(q.revealed){
+      const pid=REG.length; REG.push({key:q.key,prog:q.chs});
+      h+=progHTML(q.key,q.chs,true);
+      h+=`<p class="small">💡 ${q.tips}</p>
+      <div class="row">
+        <button class="btn play" data-pid="${pid}">▶ 再生</button>
+        <button class="btn" id="qok" style="color:var(--good)">◯ できた</button>
+        <button class="btn" id="qng" style="color:var(--warn)">△ あやしい</button>
+      </div>
+      <div class="notesOut" data-out="${pid}"></div>`;
+    }
+    h+=`</div>`;
+  }
+  h+=`<div class="row"><button class="btn primary" id="qnext">${q?"次の問題":"問題を出す"} ▶</button></div>`;
+  document.getElementById("main").innerHTML=h;
+  document.getElementById("qcat").onchange=e=>{quiz.cat=e.target.value;};
+  document.getElementById("qroman").onchange=e=>{quiz.showRoman=e.target.checked;};
+  document.getElementById("qnext").onclick=()=>{quiz.q=makeQuestion(); renderQuiz();};
+  const rv=document.getElementById("qreveal");
+  if(rv) rv.onclick=()=>{quiz.q.revealed=true; renderQuiz();};
+  const ok=document.getElementById("qok"), ng=document.getElementById("qng");
+  if(ok) ok.onclick=()=>{quiz.streak++; quiz.total++; quiz.correct++; quiz.q=makeQuestion(); renderQuiz();};
+  if(ng) ng.onclick=()=>{quiz.streak=0; quiz.total++; quiz.q=makeQuestion(); renderQuiz();};
+}
+
+/* ================= リファレンス ================= */
+let refKeyIdx=0;
+function renderRef(){
+  REG=[];
+  const k=KEYS[refKeyIdx];
+  let h=`<div class="card"><div class="row"><label>キー:
+    <select id="refkey">${KEYS.map((kk,i)=>`<option value="${i}"${i===refKeyIdx?" selected":""}>${kk.n}</option>`).join("")}</select></label>
+    <span class="small">全項目がこのキーで表示されます</span></div></div>`;
+
+  h+=`<div class="sec"><h2>定番進行</h2></div>`;
+  PROGS.forEach(p=>{ h+=progCard(p.name,p.desc,k,p.ch,{}); });
+  h+=progCard(JTTO_URA.name,JTTO_URA.desc,k,JTTO_URA.ch,{});
+
+  h+=`<div class="sec"><h2>セカンダリードミナント</h2>
+    <p class="small" style="margin-bottom:8px">ダイアトニックコードを一時的な主役(トニック)に見立て、その完全5度上のドミナント7thを前に置く</p></div>`;
+  SECONDARY.forEach(s=>{ h+=progCard(s.name,`${s.from.r} → ${s.to.r}`,k,[s.from,s.to],{}); });
+
+  h+=`<div class="sec"><h2>裏コード(トライトーン代理)</h2>
+    <p class="small" style="margin-bottom:8px">ドミナント7thは増4度(半音6つ)離れた7thと3rd・7thを共有 → 差し替え可能。ベースが半音上から解決する</p></div>`;
+  URA.forEach(u=>{ h+=progCard(u.name,`元: ${u.orig}`,k,[u.ura,u.to],{}); });
+
+  h+=`<div class="sec"><h2>テンション2-5-1</h2>
+    <p class="small" style="margin-bottom:8px">9th=ルートの全音上 / 13th=5度の全音上 / ♭9・♭13=半音下の暗い響き / #11=リディアンの浮遊感</p></div>`;
+  TENSION_251.forEach(t=>{ h+=progCard(t.name,"",k,t.ch,{}); });
+
+  document.getElementById("main").innerHTML=h;
+  document.getElementById("refkey").onchange=e=>{refKeyIdx=+e.target.value; renderRef();};
+}
+
+/* ================= タブ・イベント ================= */
+const tabs={tabDaily:renderDaily, tabQuiz:renderQuiz, tabRef:renderRef};
+Object.keys(tabs).forEach(id=>{
+  document.getElementById(id).onclick=()=>{
+    document.querySelectorAll("nav button").forEach(b=>b.classList.remove("on"));
+    document.getElementById(id).classList.add("on");
+    tabs[id]();
+  };
+});
+document.getElementById("main").addEventListener("click",e=>{
+  const chip=e.target.closest("[data-cid]");
+  if(chip){
+    const r=REG[+chip.dataset.cid];
+    if(r&&r.ch){
+      playChord(r.key,r.ch);
+      const card=chip.closest(".card");
+      const out=card&&card.querySelector(".notesOut");
+      if(out) out.textContent=`${chordName(r.key,r.ch)} = ${chordNotes(r.key,r.ch)}`;
+    }
+    return;
+  }
+  const pb=e.target.closest("[data-pid]");
+  if(pb){
+    const r=REG[+pb.dataset.pid];
+    if(r&&r.prog) playProg(r.key,r.prog);
+  }
+});
+const WDJ=["日","月","火","水","木","金","土"];
+document.getElementById("dateLabel").textContent=
+  `${today.getFullYear()}/${today.getMonth()+1}/${today.getDate()}(${WDJ[today.getDay()]})`;
+renderDaily();
+</script>
+</body>
+</html>
